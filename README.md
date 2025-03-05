@@ -1,4 +1,4 @@
-# YOLOv8_detection_streak
+# YOLOv8_segmentation_streak
 เก็บรวบรวมโค้ดของ yolov8n พร้อมคำอธิบาย 
 
 บทความที่วิเคราะห์และรีวิวสถาปัตยกรรมของ YOLOv8 - [A Comprehensive Review of YOLO Architectures in Computer Vision: From YOLOv1 to YOLOv8 and YOLO-NAS](https://arxiv.org/abs/2304.00501?utm_source=chatgpt.com)
