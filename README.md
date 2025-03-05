@@ -252,6 +252,7 @@ print(f"Annotated images saved at: {output_image_folder}")
 
 ## 5.3. mAP 
 mAP (mean Average Precision) เป็นค่าที่ใช้ในการประเมินประสิทธิภาพของโมเดลในงานที่เกี่ยวข้องกับการตรวจจับ (object detection) และการแยกส่วน (segmentation) ซึ่ง mAP จะใช้ในการวัดความแม่นยำของการทำนายของโมเดลที่ทำการตรวจจับวัตถุหรือแยกส่วนวัตถุในภาพ โดยทั่วไปแล้ว mAP ถูกคำนวณจากค่า Average Precision (AP) ที่ได้จากการประเมินผลในแต่ละคลาสหรือประเภทของวัตถุ ซึ่ง AP จะเป็นการคำนวณความแม่นยำของโมเดลในแต่ละกรณี เช่น คะแนน Precision-Recall (PR Curve) และคำนวณค่าเฉลี่ยจากแต่ละคลาสที่มีการทำนาย
+
 ![image](https://github.com/user-attachments/assets/3a0ed6ff-d9a6-4dcb-b61e-88deed747ad4)
 
 
