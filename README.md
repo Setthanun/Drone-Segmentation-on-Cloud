@@ -159,15 +159,15 @@ import pandas as pd
 import os
 from ultralytics import YOLO
 
-input_folder = r"<ใส่ path ที่มีโฟลเดอร์รูปภาพ อยู่>" #E:\41552_processed
-output_folder = r"<ใส่ path ที่มีโฟลเดอร์ Output อยู่>" #C:\Users\SETTHANUN\Desktop\Dear\detect_segment\Continuous_frames
+input_folder = r"E:\41552_processed2"
+output_folder = r"D:\result9"
 output_csv = os.path.join(output_folder, "segmentation_results.csv")
 output_image_folder = os.path.join(output_folder, "annotated_images")
 
 os.makedirs(output_folder, exist_ok=True)
 os.makedirs(output_image_folder, exist_ok=True)
 
-model = YOLO(r"<ใส่ path ที่มีโมเดล.pt>") #C:\Users\SETTHANUN\Desktop\Dear\Model\segment\weight_streak_yolov8_seg.pt
+model = YOLO(r"C:\Users\SETTHANUN\Desktop\Dear\Model\segment\weight_streak_yolov8_seg.pt")
 
 image_paths = [os.path.join(input_folder, f) for f in os.listdir(input_folder) if f.endswith((".jpg", ".png"))]
 
@@ -180,7 +180,7 @@ for img_path in image_paths:
         print(f"Error loading image: {img_path}")
         continue
 
-    results = model(img_path, save=True, imgsz=4096)
+    results = model(img_path, save=False, imgsz=4096)
 
     if not results or len(results[0].masks) == 0:
         print(f"No detections for: {img_path}")
@@ -189,65 +189,82 @@ for img_path in image_paths:
 
     for obj_id, (mask, box, conf) in enumerate(zip(results[0].masks.data, results[0].boxes.data, results[0].boxes.conf), start=1):
         mask_np = mask.cpu().numpy().astype(np.uint8) * 255
+        
         contours, _ = cv2.findContours(mask_np, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        #print(f"Object {obj_id} Mask Contours: {contours}")
+        
+        #mask_size = mask_np.shape  # (height, width)
+        #print(f"Object {obj_id} Mask Size: {mask_size}")
+        
+        #cv2.imshow(f"Mask {obj_id}", mask_np)
+        
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
-        if not contours:
-            continue
+        if contours:
+            all_contours = np.vstack(contours)
+            x1, y1, w, h = cv2.boundingRect(all_contours)
+            x2, y2 = x1 + w, y1 + h
 
-        all_contours = np.vstack(contours)
-        x1, y1, w, h = cv2.boundingRect(all_contours)
-        x2, y2 = x1 + w, y1 + h
+            M = cv2.moments(mask_np)
+            x0 = int(M["m10"] / M["m00"]) if M["m00"] != 0 else x1 + w // 2
+            y0 = int(M["m01"] / M["m00"]) if M["m00"] != 0 else y1 + h // 2
 
-        M = cv2.moments(all_contours)
-        x0 = int(M["m10"] / M["m00"]) if M["m00"] != 0 else x1 + w // 2
-        y0 = int(M["m01"] / M["m00"]) if M["m00"] != 0 else y1 + h // 2
+            conf = float(conf.cpu().numpy())
 
-        conf = float(conf.cpu().numpy())
+            results_list.append([os.path.basename(img_path), obj_id, x1, y1, x2, y2, x0, y0, conf])
 
-        results_list.append([os.path.basename(img_path), obj_id, x1, y1, x2, y2, x0, y0, conf])
+    df = pd.DataFrame(results_list, columns=["File name", "Object ID", "x1", "y1", "x2", "y2", "x0", "y0", "Confidence"])
+    df.to_csv(output_csv, index=False)
+    print(f"Results saved at: {output_csv}")
 
-df = pd.DataFrame(results_list, columns=["File name", "Object ID", "x1", "y1", "x2", "y2", "x0", "y0", "Confidence"])
-df.to_csv(output_csv, index=False)
-print(f"Results saved at: {output_csv}")
+    color_mask = np.zeros_like(image, dtype=np.uint8)
+    for obj_id, mask in enumerate(results[0].masks.data, start=1):
+        mask_np = mask.cpu().numpy().astype(np.uint8) * 255
+        contours, _ = cv2.findContours(mask_np, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for c in contours:
+            cv2.drawContours(image, [c], -1, (0, 0, 255), thickness=cv2.FILLED)  # สีแดงเข้ม
 
-for img_path in image_paths:
-    image = cv2.imread(img_path)
-    if image is None:
-        continue
+    segmented_image = cv2.addWeighted(image, 1, color_mask, 0.7, 0)
 
-    file_name = os.path.basename(img_path)
-    df_image = df[df['File name'] == file_name]
-
+    df_image = df[df['File name'] == os.path.basename(img_path)]
     for _, row in df_image.iterrows():
-        x1, y1, x2, y2 = int(row['x1']), int(row['y1']), int(row['x2']), int(row['y2'])
+        obj_id = int(row['Object ID'])
         x0, y0 = int(row['x0']), int(row['y0'])
-        conf = row['Confidence']
+        x1, y1 = int(row['x1']), int(row['y1'])
 
-        cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.circle(image, (x0, y0), 5, (255, 0, 0), -1)
-        cv2.putText(image, f"Centroid: ({x0}, {y0})", (x0 + 10, y0 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+        cv2.circle(segmented_image, (x0, y0), 5, (255, 50, 50), -1)
+        cv2.putText(segmented_image, f"Obj {obj_id} (Conf {row['Confidence']:.2f})", (x1, y1 - 10),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        cv2.putText(segmented_image, f"Centroid: ({x0}, {y0})", (x0 + 10, y0 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 50, 50), 2)  
 
-        corners = [(x1, y1), (x2, y2), (x1, y2), (x2, y1)]
-        for (cx, cy) in corners:
-            cv2.circle(image, (cx, cy), 5, (0, 255, 0), -1)
-            cv2.putText(image, f"({cx}, {cy})", (cx + 10, cy - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-
-    output_img_path = os.path.join(output_image_folder, file_name)
-    cv2.imwrite(output_img_path, image)
-    print(f"Saved annotated image: {output_img_path}")
+    output_segmented_path = os.path.join(output_image_folder, f"segmented_{os.path.basename(img_path)}")
+    cv2.imwrite(output_segmented_path, segmented_image)
+    print(f"Saved segmented image: {output_segmented_path}")
 
 print("Final segmentation results:")
 print(df.head(20))
 print(f"Annotated images saved at: {output_image_folder}")
+)
 ```
 
 # ขั้นตอนที่ 5: Result
-## 5.1. การ Segmet ธรรมดา
-ภาพนี้แสดงผลลัพธ์ของการแบ่งส่วนภาพ (segmentation) ซึ่งมีการเน้นวัตถุในภาพโดยใช้สีเหลืองสดเพื่อล้อมรอบบริเวณที่ตรวจจับได้ วัตถุที่ถูกแบ่งส่วนนั้นอยู่ในอากาศเหนือแม่น้ำและมีรูปร่างที่ซับซ้อน โดยพื้นหลังของภาพประกอบไปด้วยท้องฟ้า เมฆ แม่น้ำ และสิ่งปลูกสร้าง ซึ่งช่วยให้สามารถแยกวัตถุออกจากบริบทของภาพได้อย่างชัดเจน เทคนิคที่ใช้ในการแบ่งส่วนภาพนี้สามารถช่วยในการระบุและแยกวัตถุจากพื้นหลังเพื่อการวิเคราะห์และประมวลผลเพิ่มเติม เช่น การตรวจจับและติดตามวัตถุในระบบคอมพิวเตอร์วิทัศน์ หรือการนำไปใช้ในแอปพลิเคชันที่เกี่ยวข้องกับยานพาหนะทางอากาศและภูมิศาสตร์
-![image](https://github.com/user-attachments/assets/806b0911-3748-4a65-b569-aad11f0f0b8e)
+## 5.1. ผลลัพธ์จากการ Segmet แบบธรรมดา
+
+เป็นผลลัพธ์จากการทดสอบ Image Segmentation ซึ่งเป็นกระบวนการแบ่งส่วนภาพออกเป็นกลุ่มของพิกเซลที่มีความหมาย โดยในที่นี้ใช้สำหรับการตรวจจับขอบเขตและพิกัดในภาพท้องฟ้าที่มีดวงดาว ระบบสามารถระบุพื้นที่ของวัตถุที่ตรวจจับได้ และทำการไฮไลต์บริเวณที่เป็นวัตถุเป้าหมาย การใช้กรอบสีน้ำเงิน (bounding box) ทำหน้าที่แสดงขอบเขตของวัตถุที่ถูกตรวจพบ อย่างไรก็ตาม ในการแบ่งส่วนจริงๆ ระบบจะพิจารณาพื้นที่ของวัตถุที่ตรวจจับได้ โดยไม่จำกัดอยู่แค่กรอบสี่เหลี่ยม แต่จะเป็นการแบ่งพื้นที่ตามลักษณะของวัตถุจริง
+
+ตัวเลข 0.85 และ 0.89 ที่ปรากฏในภาพ หมายถึงค่าความมั่นใจของโมเดลในการแบ่งส่วนของวัตถุแต่ละรายการ ค่าที่สูงกว่า 0.8 แสดงให้เห็นว่าโมเดลมีความมั่นใจสูงว่าพื้นที่ที่ถูกตรวจจับนั้นเป็นวัตถุที่ต้องการ
+
+![2024_11_26_13_24_02_exp_5_000000_THAICOM8_processed](https://github.com/user-attachments/assets/d83e4610-f91a-4957-b7a4-f81ec1f4ec02)
+
+![image](https://github.com/user-attachments/assets/3aad0334-d25d-4c37-92c6-0fd31a0aefc3)
+
 
 ## 5.2. วาดจุด x,y,center
-ภาพนี้แสดงผลลัพธ์ของการระบุตำแหน่งและขอบเขตของวัตถุในภาพ โดยใช้จุดพิกัดที่สำคัญ ได้แก่ x1,y1,x2,y2 ซึ่งแทนตำแหน่งมุมซ้ายบนและมุมขวาล่างของกรอบสี่เหลี่ยมที่ล้อมรอบวัตถุ (bounding box) และ x,y center ซึ่งเป็นจุดศูนย์กลางของกรอบสี่เหลี่ยม คำนวณจากค่าเฉลี่ยของพิกัดมุมทั้งสอง การแสดงผลนี้ช่วยในการวิเคราะห์ตำแหน่งของวัตถุในภาพ ซึ่งสามารถนำไปใช้ในงานด้านการตรวจจับวัตถุ (object detection) การติดตามวัตถุ (object tracking) หรือการวิเคราะห์ภาพอื่น ๆ ได้
+
+ผลลัพธ์จากการทดสอบการแบ่งส่วน (Segmentation) ของวัตถุในภาพถ่ายดาราศาสตร์ วัตถุแต่ละชิ้นที่ถูกตรวจจับจะถูกกำหนดหมายเลข เช่น Obj 1 และ Obj 2 ซึ่งหมายถึงลำดับของวัตถุที่โมเดลสามารถตรวจพบได้ในภาพ, สำหรับแต่ละวัตถุ จะมีค่า Confidence (Conf) กำกับอยู่ เพื่อแสดงระดับความมั่นใจของโมเดลที่มีต่อการตรวจจับวัตถุนั้น ค่า Conf นี้เป็นตัวเลขที่อยู่ระหว่าง 0 ถึง 1 โดยค่าใกล้ 1 หมายถึงความมั่นใจสูง, จุดสีน้ำเงิน ในภาพแสดงถึง Centroid หรือจุดศูนย์กลางของวัตถุที่ถูกตรวจจับ พิกัดของ Centroid จะแสดงเป็นข้อความสีน้ำเงินข้างวัตถุนั้น จุดศูนย์กลางนี้เป็นค่ากลางของตำแหน่งพิกเซลทั้งหมดที่เป็นส่วนหนึ่งของวัตถุ โดยจะแสดงเป็นพิกัด x,y และ เส้นสีแดง เป็น Segment Mask ซึ่งแสดงรูปร่างของวัตถุที่ถูกตรวจจับในภาพ เส้นนี้แสดงให้เห็นว่า วัตถุที่ตรวจพบนั้นไม่ได้เป็นจุดเดี่ยว แต่มีลักษณะเป็นเส้นหรือมีการเคลื่อนที่ในช่วงเวลาที่บันทึกภาพ
+
 ![2024_11_25_15_40_06_exp_10_000000_THAICOM6_processed](https://github.com/user-attachments/assets/dad573d0-44cf-4fcd-a847-f621d3f260af)
 
 ## 5.3. mAP 
@@ -263,7 +280,7 @@ mAP (mean Average Precision) เป็นค่าที่ใช้ในกา
 
 [![DRIVE - Ultralytics](https://img.shields.io/badge/DRIVE-Ultralytics-006400)](https://drive.google.com/file/d/1JaNYy7bcdA9FnZMclFmockTiUT2IHGE7/view?usp=sharing)
 
-## 6.2. กรณีดาวน์โหลด labelImg ไม่ได้
+## 6.2. กรณีดาวน์โหลด labelme ไม่ได้
 
 โฟลเดอร์ใน Google drive - [labelImg drive](https://drive.google.com/file/d/1sQ2g4o0fdcOSwqGdM01ZhoKLkwvsYdpV/view?usp=sharing)
 
