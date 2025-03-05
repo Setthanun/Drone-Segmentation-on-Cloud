@@ -102,6 +102,54 @@ model.train(data=r"<ใส่ path ที่มีไฟล์ dataset.yaml อ�
 
 # ขั้นตอนที่ 4: Test
 
+## 4.1. การ Test ปกติ
+```python
+import supervision as sv
+from ultralytics import YOLO
+import numpy as np  
+import matplotlib.pyplot as plt
+ 
+data_yaml_path = r"<ใส่ path ที่มีไฟล์ dataset.yaml อยู่>"
+ 
+annotations_directory_path = r"<ใส่ path ที่มีโฟลเดอร์ mask อยู่>"
+ 
+images_directory_path = r"<ใส่ path ที่มีโฟลเดอร์รูปภาพ อยู่>"
+ 
+with open(data_yaml_path, 'r', encoding='utf-8') as file:
+    print(file.read())  
+ 
+dataset = sv.DetectionDataset.from_yolo(
+    annotations_directory_path=annotations_directory_path,
+    data_yaml_path=data_yaml_path,
+    images_directory_path=images_directory_path
+)
+ 
+model = YOLO(r"<ใส่ path ที่มีโมเดล.pt>")  
+ 
+def callback(image: np.ndarray) -> sv.Detections:
+    result = model.predict(image, save=True)[0]
+   
+    if result.probs is not None and len(result.probs) > 0:
+        print("Detected class names:", result.names)
+        print("Detected class indices:", result.probs.argmax(axis=-1))
+        predicted_classes = [result.names[int(i)] for i in result.probs.argmax(axis=-1)]
+        print("Predicted class names:", predicted_classes)
+    else:
+        print("No objects detected in the image.")
+   
+    return sv.Detections.from_ultralytics(result)
+ 
+ 
+mean_average_precision = sv.MeanAveragePrecision.benchmark(
+    dataset=dataset,
+    callback=callback
+)
+ 
+print("mAP50: ", mean_average_precision.map50)
+print("mAP50_95: ", mean_average_precision.map50_95)
+```
+
+## 4.1. การ Test ปกติ
 ```python
 import supervision as sv
 from ultralytics import YOLO
